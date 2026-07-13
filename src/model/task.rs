@@ -1,5 +1,7 @@
 use crate::model::languages::Language;
+use serde::{Deserialize, Serialize};
 
+#[derive(Deserialize, Serialize)]
 pub struct Task {
     pub script: String,
     pub lang: Language,
