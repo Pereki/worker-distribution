@@ -11,11 +11,11 @@ impl ExecuteUtils {
     }
 
     pub fn exec(task: Task) -> Option<Result> {
-        let output = Command::new("echo")
+        let output = Command::new("sh")
+            .arg("-c")
             .arg(task.script)
             .output()
             .expect("Failed to execute command");
-
         let str = String::from_utf8(output.stdout).unwrap();
 
         Some(Result::new(str))

@@ -11,8 +11,9 @@ impl WorkerRegister {
         }
     }
 
-    pub fn register(&mut self, worker: Worker) {
+    pub fn register(&mut self, worker: Worker) -> Result<(), ()> {
         self.workers.push(worker);
+        Ok(())
     }
 
     pub fn get_available_worker(&self) -> Option<&Worker> {

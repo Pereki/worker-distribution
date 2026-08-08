@@ -1,24 +1,21 @@
-use std::fmt::format;
-
-use axum::Json;
 use reqwest::Client;
 
 use crate::{
     model::{result::Result, task::Task, worker::Worker},
-    service::worker_register::{self, WorkerRegister},
+    service::worker_register::WorkerRegister,
 };
 
-pub struct WorkerDistributer {
+pub struct WorkerDistributor {
     pub worker_register: WorkerRegister,
 }
 
-impl WorkerDistributer {
+impl WorkerDistributor {
     pub fn new(worker_register: WorkerRegister) -> Self {
-        WorkerDistributer { worker_register }
+        WorkerDistributor { worker_register }
     }
 
-    pub async fn execute_task(&self, task: Task) -> Result {
-        let default_worker = Worker::new(true, String::from("localhost"));
+    pub async fn distribute_task(&self, task: Task) -> Result {
+        let default_worker = Worker::new(true, String::from("http://localhost:3000"));
 
         let worker: &Worker = self
             .worker_register

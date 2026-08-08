@@ -1,3 +1,4 @@
+#[derive(serde::Deserialize, serde::Serialize)]
 pub struct Worker {
     pub is_available: bool,
     pub ip: String,
