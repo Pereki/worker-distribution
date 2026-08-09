@@ -11,6 +11,7 @@ impl ExecuteUtils {
     }
 
     pub fn exec(task: Task) -> Option<Result> {
+        println!("Executing task {}", task.script);
         let output = Command::new("sh")
             .arg("-c")
             .arg(task.script)
