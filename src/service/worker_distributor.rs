@@ -27,8 +27,16 @@ pub async fn distribute_task(
             }
             worker_reeceiver.changed().await;
         };
+        task_storage
+            .lock()
+            .await
+            .update_worker_of(&task.uuid, worker.clone());
 
-        println!("Sending Task {} to worker {}", task.task.script, worker.ip);
+        task_storage.lock().await.update_satus_of(
+            &task.uuid,
+            crate::model::task_with_result::Status::COMPUTING,
+        );
+        println!("Sending Task {} to worker {}", task.task.code, worker.ip);
 
         worker_register.lock().await.lock_worker(&worker.ip);
         let client = Client::new();
@@ -42,10 +50,12 @@ pub async fn distribute_task(
         task_storage
             .lock()
             .await
-            .task_hashmap
-            .get_mut(&task.uuid)
-            .unwrap()
-            .result = response.unwrap().json().await.unwrap();
+            .update_result_of(&task.uuid, response.unwrap().json().await.unwrap());
+
+        task_storage
+            .lock()
+            .await
+            .update_satus_of(&task.uuid, crate::model::task_with_result::Status::FINISHED);
 
         worker_register.lock().await.unlock_worker(&worker.ip);
     }

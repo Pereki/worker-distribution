@@ -9,6 +9,7 @@ use axum::{
     routing::{get, post},
 };
 use clap::Parser;
+use local_ip_address::local_ip;
 use reqwest::{Client, StatusCode};
 use serde_json::json;
 use tokio::sync::{Mutex, mpsc};
@@ -23,7 +24,7 @@ use crate::{
         worker::Worker,
     },
     service::{
-        execute_utils::ExecuteUtils, task_storage::TaskStorage, worker_distributor,
+        execute_utils::exec, health_check, task_storage::TaskStorage, worker_distributor,
         worker_register::WorkerRegister,
     },
 };
@@ -47,6 +48,7 @@ async fn main() {
         .route("/api/work", post(work))
         .route("/api/register", post(register))
         .route("/api/result/{uuid}", get(result))
+        .route("/api/health", get(health))
         .with_state(app_state);
 
     if arguments.server_type == ServerType::WORKER {
@@ -55,7 +57,7 @@ async fn main() {
 
         let worker = Worker::new(
             true,
-            String::from(format!("http://localhost:{}", arguments.port)),
+            String::from(format!("http://{}:{}", local_ip().unwrap(), arguments.port)),
         );
         let _ = client
             .post(format!(
@@ -74,6 +76,8 @@ async fn main() {
         task_storage.clone(),
     ));
 
+    tokio::spawn(health_check::check_health(worker_register.clone()));
+
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", arguments.port))
         .await
         .unwrap();
@@ -89,6 +93,8 @@ async fn distribute(
         uuid: Uuid::new_v4().to_string(),
         task,
         result: Option::None,
+        status: model::task_with_result::Status::QUEUED,
+        worker: Option::None,
     };
 
     app_state
@@ -103,7 +109,7 @@ async fn distribute(
 }
 
 async fn work(Json(task): Json<Task>) -> impl IntoResponse {
-    let response = ExecuteUtils::exec(task).expect("failed");
+    let response = exec(task).await.expect("failed");
     let json_response = json!(response);
     Json(json_response)
 }
@@ -128,4 +134,8 @@ async fn result(
         Some(task) => Ok(Json(task.clone())),
         None => Err(StatusCode::NOT_FOUND),
     }
+}
+
+async fn health() -> StatusCode {
+    StatusCode::OK
 }

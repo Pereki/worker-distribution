@@ -21,9 +21,9 @@ A compile net over Raspberry Pis: a **distributer** (controller) schedules build
 - [X] Execute real shell commands via `sh -c` with proper exit-code handling.
 - [ ] Return a real result (stdout/stderr split, exit code, duration).
 - [ ] Job model: `Uuid` job ID + status lifecycle (`queued → running → done/failed`).
-- [ ] Client submits `POST /api/distribute` → gets back a job ID.
-- [ ] Client polls `GET /result/<id>` (or `/api/result`) for status + output once finished.
-- [ ] Job store on the distributer: `HashMap<Uuid, Job>` — will need `Mutex`/`RwLock` (interior mutability), same as the worker register.
+- [X] Client submits `POST /api/distribute` → gets back a job ID.
+- [X] Client polls `GET /result/<id>` (or `/api/result`) for status + output once finished.
+- [X] Job store on the distributer: `HashMap<Uuid, Job>` — will need `Mutex`/`RwLock` (interior mutability), same as the worker register.
 - [ ] **Distributer-driven heartbeat**: distributer periodically pings each registered worker (`GET /health` on the worker) and marks them available/unavailable. The distributer is the single authority on which nodes are valid. Worker stays passive.
   - The heartbeat task mutates the same register the `/register` handler and scheduler touch — make sure the lock design covers all three access points.
 - [ ] Timeouts + retries on worker communication.

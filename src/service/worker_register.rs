@@ -3,7 +3,7 @@ use tokio::sync::watch::Sender;
 use crate::model::worker::Worker;
 
 pub struct WorkerRegister {
-    workers: Vec<Worker>,
+    pub workers: Vec<Worker>,
     worker_sender: Sender<Vec<Worker>>,
 }
 
