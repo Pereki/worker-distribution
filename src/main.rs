@@ -1,6 +1,5 @@
 mod model;
 mod service;
-
 use std::sync::Arc;
 
 use axum::{
