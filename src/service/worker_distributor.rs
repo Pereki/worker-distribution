@@ -5,7 +5,11 @@ use tokio::sync::{Mutex, mpsc::Receiver, watch::Receiver as WatchReceiver};
 use reqwest::Client;
 
 use crate::{
-    model::{task_with_result::TaskWithResult, worker::Worker},
+    model::{
+        computing_result::ComputingResult,
+        task_with_result::{Status, TaskWithResult},
+        worker::Worker,
+    },
     service::{task_storage::TaskStorage, worker_register::WorkerRegister},
 };
 
@@ -25,17 +29,12 @@ pub async fn distribute_task(
             {
                 break worker;
             }
-            worker_reeceiver.changed().await;
+            let _ = worker_reeceiver.changed().await;
         };
-        task_storage
-            .lock()
-            .await
-            .update_worker_of(&task.uuid, worker.clone());
 
-        task_storage.lock().await.update_satus_of(
-            &task.uuid,
-            crate::model::task_with_result::Status::COMPUTING,
-        );
+        set_worker_for_result(task_storage.clone(), &task.uuid, worker.clone()).await;
+        set_status(task_storage.clone(), &task.uuid, Status::COMPUTING).await;
+
         println!("Sending Task {} to worker {}", task.task.code, worker.ip);
 
         worker_register.lock().await.lock_worker(&worker.ip);
@@ -47,26 +46,73 @@ pub async fn distribute_task(
             .send()
             .await;
 
-        match response {
-            Ok(sucess_result) => {
-                task_storage
-                    .lock()
-                    .await
-                    .update_result_of(&task.uuid, sucess_result.json().await.unwrap());
+        let computing_result: Option<ComputingResult> = match response {
+            Ok(result) => {
+                if result.status().is_success() {
+                    result.json::<ComputingResult>().await.ok()
+                } else {
+                    eprintln!(
+                        "Worker did not return a successfull response for {}",
+                        &task.uuid
+                    );
+                    None
+                }
+            }
+            Err(x) => {
+                eprintln!("Networkerror in communication with worker: {}", x);
+                None
+            }
+        };
 
-                task_storage
-                    .lock()
-                    .await
-                    .update_satus_of(&task.uuid, crate::model::task_with_result::Status::FINISHED);
-            }
+        let handler_result = match computing_result {
+            Some(result) => handle_success(result, task_storage.clone(), &task.uuid).await,
+            None => handle_error(task_storage.clone(), &task.uuid).await,
+        };
+
+        match handler_result {
             Err(_) => {
-                task_storage
-                    .lock()
-                    .await
-                    .update_satus_of(&task.uuid, crate::model::task_with_result::Status::ERROR);
+                eprintln!(
+                    "Handler did not register success or error correctly for task {}.",
+                    &task.uuid
+                )
             }
+            Ok(_) => {}
         }
 
         worker_register.lock().await.unlock_worker(&worker.ip);
+    }
+}
+
+async fn handle_success(
+    result: ComputingResult,
+    task_storage: Arc<Mutex<TaskStorage>>,
+    uuid: &str,
+) -> Result<(), ()> {
+    task_storage.lock().await.update_result_of(uuid, result)?;
+    set_status(task_storage, uuid, Status::FINISHED).await;
+    Ok(())
+}
+
+async fn handle_error(task_storage: Arc<Mutex<TaskStorage>>, uuid: &str) -> Result<(), ()> {
+    set_status(task_storage, uuid, Status::ERROR).await;
+    Ok(())
+}
+
+async fn set_status(task_storage: Arc<Mutex<TaskStorage>>, uuid: &str, status: Status) {
+    match task_storage.lock().await.update_satus_of(uuid, status) {
+        Err(_) => eprint!("Could not change status of task {}.", uuid),
+        Ok(_) => {}
+    }
+}
+
+async fn set_worker_for_result(task_storage: Arc<Mutex<TaskStorage>>, uuid: &str, worker: Worker) {
+    match task_storage
+        .clone()
+        .lock()
+        .await
+        .update_worker_of(uuid, worker)
+    {
+        Err(_) => eprint!("Error saving result for task {}", uuid),
+        Ok(_) => {}
     }
 }
