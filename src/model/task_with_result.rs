@@ -16,6 +16,7 @@ pub enum Status {
     QUEUED,
     COMPUTING,
     FINISHED,
+    ERROR,
 }
 
 impl TaskWithResult {

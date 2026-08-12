@@ -13,6 +13,7 @@ use local_ip_address::local_ip;
 use reqwest::{Client, StatusCode};
 use serde_json::json;
 use tokio::sync::{Mutex, mpsc};
+use tower_http::cors::{Any, CorsLayer};
 use uuid::Uuid;
 
 use crate::{
@@ -43,13 +44,19 @@ async fn main() {
         worker_register: worker_register.clone(),
     };
 
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
     let app = Router::<AppState>::new()
         .route("/api/distribute", post(distribute))
         .route("/api/work", post(work))
         .route("/api/register", post(register))
         .route("/api/result/{uuid}", get(result))
         .route("/api/health", get(health))
-        .with_state(app_state);
+        .with_state(app_state)
+        .layer(cors);
 
     if arguments.server_type == ServerType::WORKER {
         println!("Registering on Distributor...");

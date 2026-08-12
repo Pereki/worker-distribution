@@ -47,15 +47,25 @@ pub async fn distribute_task(
             .send()
             .await;
 
-        task_storage
-            .lock()
-            .await
-            .update_result_of(&task.uuid, response.unwrap().json().await.unwrap());
+        match response {
+            Ok(sucess_result) => {
+                task_storage
+                    .lock()
+                    .await
+                    .update_result_of(&task.uuid, sucess_result.json().await.unwrap());
 
-        task_storage
-            .lock()
-            .await
-            .update_satus_of(&task.uuid, crate::model::task_with_result::Status::FINISHED);
+                task_storage
+                    .lock()
+                    .await
+                    .update_satus_of(&task.uuid, crate::model::task_with_result::Status::FINISHED);
+            }
+            Err(_) => {
+                task_storage
+                    .lock()
+                    .await
+                    .update_satus_of(&task.uuid, crate::model::task_with_result::Status::ERROR);
+            }
+        }
 
         worker_register.lock().await.unlock_worker(&worker.ip);
     }
