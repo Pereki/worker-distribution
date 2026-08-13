@@ -64,6 +64,7 @@ async fn main() {
 
         let worker = Worker::new(
             true,
+            false,
             String::from(format!("http://{}:{}", local_ip().unwrap(), arguments.port)),
         );
         let _ = client
@@ -111,7 +112,7 @@ async fn distribute(
         .task_hashmap
         .insert(task_with_result.uuid.clone(), task_with_result.clone());
 
-    app_state.task_tx.send(task_with_result.clone()).await;
+    let _ = app_state.task_tx.send(task_with_result.clone()).await;
     Json(task_with_result)
 }
 
@@ -126,10 +127,7 @@ async fn register(
     Json(worker): Json<Worker>,
 ) -> impl IntoResponse {
     println!("registering worker {}...", worker.ip);
-    match app_state.worker_register.lock().await.register(worker) {
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
-        Ok(_) => StatusCode::OK,
-    }
+    app_state.worker_register.lock().await.register(worker)
 }
 
 async fn result(

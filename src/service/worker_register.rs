@@ -15,20 +15,15 @@ impl WorkerRegister {
         }
     }
 
-    pub fn register(&mut self, worker: Worker) -> Result<(), ()> {
+    pub fn register(&mut self, worker: Worker) {
         self.workers.push(worker);
-        self.worker_sender.send(
-            self.workers
-                .iter()
-                .filter(|worker| worker.is_available)
-                .cloned()
-                .collect(),
-        );
-        Ok(())
+        self.notify();
     }
 
     pub fn get_available_worker(&self) -> Option<&Worker> {
-        self.workers.iter().find(|worker| worker.is_available)
+        self.workers
+            .iter()
+            .find(|worker| worker.is_available && !worker.is_dead)
     }
 
     pub fn lock_worker(&mut self, worker_ip: &str) {
@@ -38,13 +33,7 @@ impl WorkerRegister {
             .unwrap()
             .is_available = false;
 
-        self.worker_sender.send(
-            self.workers
-                .iter()
-                .filter(|worker| worker.is_available)
-                .cloned()
-                .collect(),
-        );
+        self.notify();
     }
 
     pub fn unlock_worker(&mut self, worker_ip: &str) {
@@ -54,12 +43,40 @@ impl WorkerRegister {
             .unwrap()
             .is_available = true;
 
-        self.worker_sender.send(
+        self.notify();
+    }
+
+    pub fn worker_unavailable(&mut self, worker_ip: &str) {
+        self.workers
+            .iter_mut()
+            .find(|worker| worker.ip.eq(worker_ip))
+            .unwrap()
+            .is_dead = true;
+
+        self.notify();
+    }
+
+    pub fn worker_available(&mut self, worker_ip: &str) {
+        self.workers
+            .iter_mut()
+            .find(|worker| worker.ip.eq(worker_ip))
+            .unwrap()
+            .is_dead = false;
+
+        self.notify();
+    }
+
+    pub fn notify(&self) {
+        match self.worker_sender.send(
             self.workers
                 .iter()
                 .filter(|worker| worker.is_available)
+                .filter(|worker| !worker.is_dead)
                 .cloned()
                 .collect(),
-        );
+        ) {
+            Ok(_) => {}
+            Err(x) => println!("Error when notifying subscribers: {}", x),
+        }
     }
 }

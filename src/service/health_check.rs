@@ -13,7 +13,7 @@ pub async fn check_health(worker_register: Arc<Mutex<WorkerRegister>>) {
             health_test_set.spawn(curl_worker(worker.ip.clone(), worker_register.clone()));
         }
 
-        health_test_set.join_next().await;
+        health_test_set.join_all().await;
     }
 }
 
@@ -25,15 +25,18 @@ pub async fn curl_worker(worker_ip: String, worker_register: Arc<Mutex<WorkerReg
         Ok(x) => !(x.status().is_client_error() || x.status().is_server_error()),
         Err(_) => false,
     };
-    //TODO: Needs to check if a worker is actually working currently, so it doesnt get unlocked.
+
     if !availability {
         println!("Worker {} is not available.", worker_ip);
-        worker_register.lock().await.lock_worker(worker_ip.as_str());
+        worker_register
+            .lock()
+            .await
+            .worker_unavailable(worker_ip.as_str());
     } else {
         println!("Worker {} is available.", worker_ip);
         worker_register
             .lock()
             .await
-            .unlock_worker(worker_ip.as_str());
+            .worker_available(worker_ip.as_str());
     }
 }
