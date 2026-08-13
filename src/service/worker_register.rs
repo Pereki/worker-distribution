@@ -1,21 +1,82 @@
+use tokio::sync::watch::Sender;
+
 use crate::model::worker::Worker;
 
 pub struct WorkerRegister {
-    workers: Vec<Worker>,
+    pub workers: Vec<Worker>,
+    worker_sender: Sender<Vec<Worker>>,
 }
 
 impl WorkerRegister {
-    pub fn new() -> Self {
+    pub fn new(worker_sender: Sender<Vec<Worker>>) -> Self {
         Self {
             workers: Vec::new(),
+            worker_sender: worker_sender,
         }
     }
 
     pub fn register(&mut self, worker: Worker) {
         self.workers.push(worker);
+        self.notify();
     }
 
     pub fn get_available_worker(&self) -> Option<&Worker> {
-        self.workers.iter().find(|worker| worker.is_available)
+        self.workers
+            .iter()
+            .find(|worker| worker.is_available && !worker.is_dead)
+    }
+
+    pub fn lock_worker(&mut self, worker_ip: &str) {
+        self.workers
+            .iter_mut()
+            .find(|worker| worker.ip.eq(worker_ip))
+            .unwrap()
+            .is_available = false;
+
+        self.notify();
+    }
+
+    pub fn unlock_worker(&mut self, worker_ip: &str) {
+        self.workers
+            .iter_mut()
+            .find(|worker| worker.ip.eq(worker_ip))
+            .unwrap()
+            .is_available = true;
+
+        self.notify();
+    }
+
+    pub fn worker_unavailable(&mut self, worker_ip: &str) {
+        self.workers
+            .iter_mut()
+            .find(|worker| worker.ip.eq(worker_ip))
+            .unwrap()
+            .is_dead = true;
+
+        self.notify();
+    }
+
+    pub fn worker_available(&mut self, worker_ip: &str) {
+        self.workers
+            .iter_mut()
+            .find(|worker| worker.ip.eq(worker_ip))
+            .unwrap()
+            .is_dead = false;
+
+        self.notify();
+    }
+
+    pub fn notify(&self) {
+        match self.worker_sender.send(
+            self.workers
+                .iter()
+                .filter(|worker| worker.is_available)
+                .filter(|worker| !worker.is_dead)
+                .cloned()
+                .collect(),
+        ) {
+            Ok(_) => {}
+            Err(x) => println!("Error when notifying subscribers: {}", x),
+        }
     }
 }
