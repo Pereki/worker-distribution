@@ -22,10 +22,14 @@ use crate::{
         argument::{Argument, ServerType},
         task::Task,
         task_with_result::TaskWithResult,
-        worker::Worker,
+        worker::{Load, Worker},
     },
     service::{
-        execute_utils::exec, health_check, task_storage::TaskStorage, worker_distributor,
+        execute_utils::exec,
+        health_check,
+        sysinfo_utils::{get_cpu_usage, get_memory_usage},
+        task_storage::TaskStorage,
+        worker_distributor,
         worker_register::WorkerRegister,
     },
 };
@@ -49,14 +53,19 @@ async fn main() {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    let app = Router::<AppState>::new()
-        .route("/api/distribute", post(distribute))
-        .route("/api/work", post(work))
-        .route("/api/register", post(register))
-        .route("/api/result/{uuid}", get(result))
-        .route("/api/health", get(health))
-        .with_state(app_state)
-        .layer(cors);
+    let app = match arguments.server_type {
+        ServerType::DISTRIBUTOR => Router::<AppState>::new()
+            .route("/api/distribute", post(distribute))
+            .route("/api/register", post(register))
+            .route("/api/result/{uuid}", get(result))
+            .with_state(app_state)
+            .layer(cors),
+        ServerType::WORKER => Router::<AppState>::new()
+            .route("/api/work", post(work))
+            .route("/api/health", get(health))
+            .with_state(app_state)
+            .layer(cors),
+    };
 
     if arguments.server_type == ServerType::WORKER {
         println!("Registering on Distributor...");
@@ -66,6 +75,7 @@ async fn main() {
             true,
             false,
             String::from(format!("http://{}:{}", local_ip().unwrap(), arguments.port)),
+            Load::new(get_cpu_usage(), get_memory_usage()),
         );
         let _ = client
             .post(format!(
@@ -97,13 +107,13 @@ async fn distribute(
     State(app_state): State<AppState>,
     Json(task): Json<Task>,
 ) -> impl IntoResponse {
-    let task_with_result = TaskWithResult {
-        uuid: Uuid::new_v4().to_string(),
+    let task_with_result = TaskWithResult::new(
         task,
-        result: Option::None,
-        status: model::task_with_result::Status::QUEUED,
-        worker: Option::None,
-    };
+        Option::None,
+        Uuid::new_v4().to_string(),
+        model::task_with_result::Status::QUEUED,
+        Option::None,
+    );
 
     app_state
         .task_storage
@@ -117,7 +127,7 @@ async fn distribute(
 }
 
 async fn work(Json(task): Json<Task>) -> impl IntoResponse {
-    let response = exec(task).await.expect("failed");
+    let response = exec(task).await;
     let json_response = json!(response);
     Json(json_response)
 }
@@ -141,6 +151,7 @@ async fn result(
     }
 }
 
-async fn health() -> StatusCode {
-    StatusCode::OK
+async fn health() -> impl IntoResponse {
+    let load = Load::new(get_cpu_usage(), get_memory_usage());
+    Json(load)
 }

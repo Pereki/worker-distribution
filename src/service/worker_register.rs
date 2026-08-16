@@ -1,6 +1,6 @@
 use tokio::sync::watch::Sender;
 
-use crate::model::worker::Worker;
+use crate::model::worker::{Load, Worker};
 
 pub struct WorkerRegister {
     pub workers: Vec<Worker>,
@@ -62,6 +62,29 @@ impl WorkerRegister {
             .find(|worker| worker.ip.eq(worker_ip))
             .unwrap()
             .is_dead = false;
+
+        self.notify();
+    }
+
+    pub fn update_load(&mut self, worker_ip: &str, load: Load) {
+        println!(
+            "Updating load of worker {} with cpuload {} and memoryload {}",
+            &worker_ip, &load.cpu_usage, &load.memory_usage
+        );
+
+        let worker = self
+            .workers
+            .iter_mut()
+            .find(|worker| worker.ip.eq(worker_ip))
+            .unwrap();
+
+        if load.memory_usage > 80.00 || load.cpu_usage > 80.00 {
+            worker.is_available = false;
+        } else {
+            worker.is_available = true;
+        }
+
+        worker.load = load;
 
         self.notify();
     }

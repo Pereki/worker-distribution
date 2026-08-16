@@ -3,11 +3,11 @@ use std::{sync::Arc, time::Duration};
 use reqwest::Client;
 use tokio::{sync::Mutex, task::JoinSet};
 
-use crate::service::worker_register::WorkerRegister;
+use crate::{model::worker::Load, service::worker_register::WorkerRegister};
 
 pub async fn check_health(worker_register: Arc<Mutex<WorkerRegister>>) {
     loop {
-        tokio::time::sleep(Duration::from_secs(120)).await;
+        tokio::time::sleep(Duration::from_secs(10)).await;
         let mut health_test_set = JoinSet::new();
         for worker in worker_register.lock().await.workers.iter() {
             health_test_set.spawn(curl_worker(worker.ip.clone(), worker_register.clone()));
@@ -22,7 +22,16 @@ pub async fn curl_worker(worker_ip: String, worker_register: Arc<Mutex<WorkerReg
     let client = Client::new();
 
     let availability = match client.get(format!("{}/api/health", worker_ip)).send().await {
-        Ok(x) => !(x.status().is_client_error() || x.status().is_server_error()),
+        Ok(x) => match x.status().is_success() {
+            true => match x.json::<Load>().await.ok() {
+                Some(el) => {
+                    worker_register.lock().await.update_load(&worker_ip, el);
+                    true
+                }
+                None => false,
+            },
+            false => false,
+        },
         Err(_) => false,
     };
 
