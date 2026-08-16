@@ -11,7 +11,9 @@ use uuid::Uuid;
 
 use crate::model::computing_result::ComputingResult;
 use crate::model::languages::Language::{JAVA, SHELL};
+use crate::model::result_with_worker::ResultWithLoad;
 use crate::model::task::Task;
+use crate::service::worker_utils::wrap_result_with_worker_load;
 
 const MAIN_JAVA_FILE_NAME: &str = "Main.java";
 const MAIN_CLASS_FILE_NAME: &str = "Main.class";
@@ -23,11 +25,12 @@ const DIRECTORY_ARGUMENT: &str = "-d";
 const SHELL_COMMAND: &str = "sh";
 const INLINE_SCRIPT_ARGUMENT: &str = "-c";
 
-pub async fn exec(task: Task) -> Option<ComputingResult> {
+pub async fn exec(task: Task) -> ResultWithLoad {
     println!("Executing task {}", task.code);
+
     match task.lang {
-        JAVA => compile_java(&task).await,
-        SHELL => compile_shell(&task),
+        JAVA => wrap_result_with_worker_load(compile_java(&task).await),
+        SHELL => wrap_result_with_worker_load(compile_shell(&task)),
     }
 }
 
